@@ -41,6 +41,7 @@ from agent.core.llm_params import _resolve_llm_params
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["agent"])
+_background_teardown_tasks: set[asyncio.Task] = set()
 
 DEFAULT_CLAUDE_MODEL_ID = "bedrock/us.anthropic.claude-opus-4-6-v1"
 GATED_MODEL_IDS = {
@@ -557,6 +558,18 @@ async def list_sessions(user: dict = Depends(get_current_user)) -> list[SessionI
     """List sessions belonging to the authenticated user."""
     sessions = await session_manager.list_sessions(user_id=user["user_id"])
     return [SessionInfo(**s) for s in sessions]
+
+
+@router.post("/session/{session_id}/sandbox/teardown")
+async def teardown_session_sandbox(
+    session_id: str, user: dict = Depends(get_current_user)
+) -> dict:
+    """Best-effort sandbox teardown that preserves durable chat history."""
+    await _check_session_access(session_id, user)
+    task = asyncio.create_task(session_manager.teardown_sandbox(session_id))
+    _background_teardown_tasks.add(task)
+    task.add_done_callback(_background_teardown_tasks.discard)
+    return {"status": "teardown_requested", "session_id": session_id}
 
 
 @router.delete("/session/{session_id}")

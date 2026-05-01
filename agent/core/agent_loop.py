@@ -32,6 +32,7 @@ from agent.core.prompt_caching import with_prompt_caching
 from agent.core.session import Event, OpType, Session
 from agent.core.tools import ToolRouter
 from agent.tools.jobs_tool import CPU_FLAVORS
+from agent.tools.sandbox_tool import DEFAULT_CPU_SANDBOX_HARDWARE
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,8 @@ def _base_needs_approval(
         return False
 
     if tool_name == "sandbox_create":
-        return True
+        hardware = tool_args.get("hardware") or DEFAULT_CPU_SANDBOX_HARDWARE
+        return hardware != DEFAULT_CPU_SANDBOX_HARDWARE
 
     if tool_name == "hf_jobs":
         operation = _operation(tool_args)
