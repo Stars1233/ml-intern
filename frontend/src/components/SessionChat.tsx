@@ -23,7 +23,7 @@ interface SessionChatProps {
 
 export default function SessionChat({ sessionId, isActive, onSessionDead }: SessionChatProps) {
   const { isConnected, isProcessing, activityStatus, updateSession } = useAgentStore();
-  const { updateSessionTitle, sessions } = useSessionStore();
+  const { updateSessionTitle, sessions, setSessionProcessing } = useSessionStore();
   const sessionMeta = sessions.find((s) => s.id === sessionId);
   const isExpired = sessionMeta?.expired === true;
 
@@ -39,6 +39,10 @@ export default function SessionChat({ sessionId, isActive, onSessionDead }: Sess
   } = useAgentChat({
     sessionId,
     isActive,
+    // A backgrounded session that the backend reports mid-turn still needs to
+    // mount its live subscription; idle backgrounded sessions do not (that's
+    // what stops app load from reactivating every historical runtime).
+    isProcessing: sessionMeta?.isProcessing ?? false,
     onReady: () => logger.log(`Session ${sessionId} ready`),
     onError: (error) => logger.error(`Session ${sessionId} error:`, error),
     onSessionDead,
@@ -82,6 +86,7 @@ export default function SessionChat({ sessionId, isActive, onSessionDead }: Sess
       if (!text.trim() || busy) return;
 
       updateSession(sessionId, { isProcessing: true, activityStatus: { type: 'thinking' } });
+      setSessionProcessing(sessionId, true);
       sendMessage({ text: text.trim(), metadata: { createdAt: new Date().toISOString() } });
 
       // Auto-title the session from the first user message
@@ -101,7 +106,7 @@ export default function SessionChat({ sessionId, isActive, onSessionDead }: Sess
           });
       }
     },
-    [sessionId, sendMessage, messages, updateSessionTitle, busy, updateSession],
+    [sessionId, sendMessage, messages, updateSessionTitle, busy, updateSession, setSessionProcessing],
   );
 
   // Don't render UI for background sessions — hooks still run
