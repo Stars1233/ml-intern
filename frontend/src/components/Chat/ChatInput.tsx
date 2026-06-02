@@ -25,8 +25,8 @@ import JobsUpgradeDialog from '@/components/JobsUpgradeDialog';
 import { useAgentStore } from '@/store/agentStore';
 import { useSessionStore } from '@/store/sessionStore';
 import {
+  CLAUDE_OPUS_46_MODEL_PATH,
   CLAUDE_MODEL_PATH,
-  CLAUDE_OPUS_48_MODEL_PATH,
   GPT_55_MODEL_PATH,
   isClaudePath,
   isPremiumPath,
@@ -49,53 +49,52 @@ const getHfAvatarUrl = (modelId: string) => {
 
 const DEFAULT_MODEL_OPTIONS: ModelOption[] = [
   {
-    id: 'kimi-k2.6',
-    name: 'Kimi K2.6',
-    description: 'Novita',
-    modelPath: 'moonshotai/Kimi-K2.6',
-    avatarUrl: getHfAvatarUrl('moonshotai/Kimi-K2.6'),
+    id: 'claude-opus-4-8',
+    name: 'Claude Opus 4.8',
+    description: 'Hugging Face',
+    modelPath: CLAUDE_MODEL_PATH,
+    avatarUrl: getHfAvatarUrl(CLAUDE_MODEL_PATH),
     recommended: true,
   },
   {
     id: 'claude-opus-4-6',
     name: 'Claude Opus 4.6',
-    description: 'Anthropic',
-    modelPath: CLAUDE_MODEL_PATH,
-    avatarUrl: 'https://huggingface.co/api/avatars/Anthropic',
-    recommended: true,
-  },
-  {
-    id: 'claude-opus-4-8',
-    name: 'Claude Opus 4.8',
-    description: 'Anthropic',
-    modelPath: CLAUDE_OPUS_48_MODEL_PATH,
-    avatarUrl: 'https://huggingface.co/api/avatars/Anthropic',
+    description: 'Hugging Face',
+    modelPath: CLAUDE_OPUS_46_MODEL_PATH,
+    avatarUrl: getHfAvatarUrl(CLAUDE_OPUS_46_MODEL_PATH),
   },
   {
     id: 'gpt-5.5',
     name: 'GPT-5.5',
-    description: 'OpenAI',
+    description: 'Hugging Face',
     modelPath: GPT_55_MODEL_PATH,
-    avatarUrl: 'https://huggingface.co/api/avatars/openai',
+    avatarUrl: getHfAvatarUrl(GPT_55_MODEL_PATH),
+  },
+  {
+    id: 'kimi-k2.6',
+    name: 'Kimi K2.6',
+    description: 'Hugging Face',
+    modelPath: 'moonshotai/Kimi-K2.6',
+    avatarUrl: getHfAvatarUrl('moonshotai/Kimi-K2.6'),
   },
   {
     id: 'minimax-m2.7',
     name: 'MiniMax M2.7',
-    description: 'Novita',
+    description: 'Hugging Face',
     modelPath: 'MiniMaxAI/MiniMax-M2.7',
     avatarUrl: getHfAvatarUrl('MiniMaxAI/MiniMax-M2.7'),
   },
   {
     id: 'glm-5.1',
     name: 'GLM 5.1',
-    description: 'Together',
+    description: 'Hugging Face',
     modelPath: 'zai-org/GLM-5.1',
     avatarUrl: getHfAvatarUrl('zai-org/GLM-5.1'),
   },
   {
     id: 'deepseek-v4-pro',
     name: 'DeepSeek V4 Pro',
-    description: 'DeepInfra',
+    description: 'Hugging Face',
     modelPath: 'deepseek-ai/DeepSeek-V4-Pro:deepinfra',
     avatarUrl: getHfAvatarUrl('deepseek-ai/DeepSeek-V4-Pro'),
   },
@@ -125,6 +124,29 @@ const findModelByPath = (path: string, options: ModelOption[]): ModelOption | un
     if (claude) return claude;
   }
   return undefined;
+};
+
+const modelOptionId = (modelPath: string) => (
+  normalizeModelPath(modelPath)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+);
+
+const modelOptionFromApi = (model: {
+  id?: string;
+  label?: string;
+  provider?: string;
+  recommended?: boolean;
+}): ModelOption | null => {
+  if (!model.id) return null;
+  return {
+    id: modelOptionId(model.id),
+    name: model.label ?? model.id,
+    description: 'Hugging Face',
+    modelPath: model.id,
+    avatarUrl: getHfAvatarUrl(model.id.replace(/^huggingface\//, '')),
+    recommended: Boolean(model.recommended),
+  };
 };
 
 const readApiErrorMessage = async (res: Response, fallback: string): Promise<string> => {
@@ -221,16 +243,10 @@ export default function ChatInput({ sessionId, initialModelPath, onSend, onStop,
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled || !data?.available) return;
-        const claude = data.available.find((m: { provider?: string; id?: string }) => (
-          m.provider === 'anthropic' && m.id
-        ));
-        if (!claude?.id) return;
-
-        const next = DEFAULT_MODEL_OPTIONS.map((option) => (
-          option.id === 'claude-opus-4-6'
-            ? { ...option, modelPath: claude.id, name: claude.label ?? option.name }
-            : option
-        ));
+        const next = data.available
+          .map(modelOptionFromApi)
+          .filter((model: ModelOption | null): model is ModelOption => model !== null);
+        if (!next.length) return;
         modelOptionsRef.current = next;
         setModelOptions(next);
         if (!sessionIdRef.current) {
